@@ -1,0 +1,58 @@
+10 MODE 7 : VDU 23;8202;0;0;0;
+20 DIM OV%(2), Y%(2), NY%(2)
+30 CLS
+40 PRINT TAB(11,1) CHR$(141); CHR$(132); "****************"
+50 PRINT TAB(11,2) CHR$(141); CHR$(132); "****************"
+60 PRINT TAB(11,3) CHR$(141); CHR$(132); "*"; CHR$(131); "GOLDEN BROWN"; CHR$(132); "*"
+70 PRINT TAB(11,4) CHR$(141); CHR$(132); "*"; CHR$(131); "GOLDEN BROWN"; CHR$(132); "*"
+80 PRINT TAB(11,5) CHR$(141); CHR$(132); "****************"
+90 PRINT TAB(11,6) CHR$(141); CHR$(132); "****************"
+100 PRINT TAB(19,7) CHR$(134); "by" ' TAB(13) CHR$(134); "The Stranglers"
+110 PRINT ' CHR$(131); " b  # b  # # b  # b  # # b  # b  # # b ABBCCDEEFFGGABBCCDEEFFGGABBCCDEEFFGGABB"; CHR$(30)
+120 ?&7DE0=&84:?&7E30=&82:?&7E80=&81
+130 !&7E08=&9D86:!&7E58=&9D86
+140 A1 = 30 : A2 = 127 : O = 1 : GT = 2 : DF = 0
+150 ENVELOPE 1, 1, 0, 0, 0, 2, 2, 2, A1, 0, 0, 255, 128, 1
+160 ENVELOPE 2, 1, 0, 0, 0, 1, 1, 1, A2, 0, 0, 255, 128, 1
+170 S$ = "BVCXZQAWSEDFTGYHJIKOLP;:[]_1234567"
+180 ON GT GOTO 430, 470, 510, 550 ELSE GT = 1 : GOTO 430
+190 DL = 16 : T% = 1
+200 FOR K = 1 TO LEN T$
+210 T = TIME + DL
+220 F$ = MID$(T$, K, 1) : G$ = MID$(M$, K, 1) : H$ = MID$(N$, K, 1)
+230 IF F$ <> " " THEN SOUND 1, 1, 4*O + 4*INSTR(S$, F$), 1
+240 IF G$ <> " " THEN SOUND 3, 2, 4*O + 4*INSTR(S$, G$), 1
+250 IF H$ <> " " THEN SOUND 2, 1, 4*O + DF + 4*INSTR(S$, H$), 1
+260 IN0 = INSTR(S$, F$) : IN1 = INSTR(S$, G$) : IN2 = INSTR(S$, H$)
+270 IF IN0 = 0 THEN IN0 = OV%(0) - 67
+280 IF IN1 = 0 THEN IN1 = OV%(1) - 67
+290 IF IN2 = 0 THEN IN2 = OV%(2) - 67
+300 OV%(0) = IN0 + 67 : OV%(1) = IN1 + 67 : OV%(2) = IN2 + 67
+310 FOR I = 0 TO 2
+320 Y%(I) = &7FFF
+330 NEXT I
+340 FOR J = 0 TO 2
+350 ?NY%(J) = 156
+360 Y%(J) = &7E80 + OV%(J) - 60 - 80*J
+370 NY%(J) = Y%(J)
+380 ?Y%(J) = 157 : Y%(J)?1 = 156
+390 NEXT J
+400 REPEAT UNTIL TIME >= T
+410 NEXT K
+420 GOTO 180
+430 T$ = "Y  I PO J T Y  I PO J T Y  I PO J T Y  I PO J T Y  I PO J T Y  I PO J T Y  I PO J T Y  I PO J T "
+440 M$ = "C  C  B B B C  C  B B B C  C  B B B C  C  B B B C  C  B B B C  C  B B B C  C  B B B C  C  B B B "
+450 N$ = "  _ PO      I O PO        _ P O   I Y J IJ      Y J IJ      Y J IJ      Y J IJ      Y T EW      " : DF = 48
+460 GT = GT + 1 : GOTO 190
+470 T$ = "P[ P[[JO JOOIP IPPJOYOTOFOP[ P[[JO JOOIP IPPJOYOTOFO" : DF = 0
+480 M$ = "E  E EZ  Z ZQ  Q QWOWOWOWOE  E EZ  Z ZQ  Q QJTYTTTFT"
+490 N$ = "ET J EJO : JIP [ IWTWTWTWTET J EJO : JIP [ IWTWTWTWT"
+500 GT = GT + 1 : GOTO 190
+510 T$ = "P[ P[[JO JOOIP IPPJOYOTOFOP[ P[[JO JOOO: O::I J Y T "
+520 M$ = "E  E EZ  Z ZQ  Q QWOWOWOWOE  E EZ  Z ZW  W WITJTYTTT"
+530 N$ = "ET J EJO : JIP [ IWTWTWTWTET J EJO : JO: : OIIJIYITI"
+540 GT = GT + 1 : GOTO 190
+550 T$ = "Y  I PO J T Y  I PO J T "
+560 M$ = "C  C  B B B C  C  B B B "
+570 N$ = "YYYYYYTTJ J YYYYYYTTJ J "
+580 GT = GT + 1 : GOTO 190
