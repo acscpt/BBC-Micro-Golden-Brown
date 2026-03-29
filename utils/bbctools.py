@@ -7,14 +7,17 @@ bbctools - List and extract files from BBC Micro DFS disc images.
 
 Supports .ssd (single-sided) and .dsd (double-sided interleaved) formats.
 BBC BASIC programs are detokenized to produce LIST-style plain text output.
-Binary files are detected and flagged with a warning.
+Binary files are extracted as raw bytes with load/exec metadata reported.
 
 Usage:
-    bbctools.py cat  <image>                    List disc catalogue
-    bbctools.py extract <image> <filename> [-o F]  Extract a file to stdout or -o file
+    bbctools.py cat  <image>                       List disc catalogue
+    bbctools.py extract <image> <filename> [-o F]  Extract one file
+    bbctools.py extract <image> "*" [-d DIR]       Extract all files
 """
 
 import argparse
+import os
+import re
 import sys
 
 # ---------------------------------------------------------------------------
@@ -212,6 +215,190 @@ def _decodeLineContent(content):
         i += 1
 
     return "".join(parts)
+
+# ---------------------------------------------------------------------------
+# BASIC pretty-printer (post-processes detokenized text lines)
+# ---------------------------------------------------------------------------
+
+def prettyPrint(lines):
+    """Apply readable spacing to detokenized BASIC lines.
+
+    This is a post-processing pass on plain text, equivalent to what a
+    sed/regex pipeline would do but with proper string-literal awareness.
+    String literals and REM/DATA tails are never altered.
+
+    Args:
+        lines: List of detokenized BASIC line strings.
+
+    Returns:
+        List of prettified line strings.
+    """
+    result = []
+    for line in lines:
+        # Detokenized lines start with a right-justified line number.
+        m = re.match(r'^(\s*\d+)(.*)', line)
+        if not m:
+            result.append(line)
+            continue
+
+        num_part = m.group(1)
+        code = m.group(2)
+
+        # Convert *| MOS comment syntax to REM, stripping any control
+        # characters (e.g. VDU 21 anti-listing traps) from the tail.
+        stripped = code.lstrip()
+        if stripped.startswith('*|'):
+            rest = stripped[2:]
+            rest = ''.join(c for c in rest if ord(c) >= 32)
+            code = ' REM *|' + rest
+
+        # Ensure exactly one space between line number and first token.
+        if code and not code[0].isspace():
+            code = ' ' + code
+
+        result.append(num_part + _prettyCode(code))
+    return result
+
+
+def _prettyCode(code):
+    """Format the code portion of one BASIC line.
+
+    Walks character by character so quoted strings and REM/DATA tails
+    are passed through verbatim.  Outside those regions, spaces are
+    normalised around operators and commas.
+
+    Args:
+        code: The code portion of a detokenized BASIC line (no line number).
+
+    Returns:
+        Formatted code string.
+    """
+    buf = []
+    i = 0
+    n = len(code)
+    in_string = False
+    literal_rest = False
+
+    while i < n:
+        ch = code[i]
+
+        # Inside a quoted string - pass through verbatim until closing quote.
+        if in_string:
+            buf.append(ch)
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+
+        # After REM or DATA - remainder of line is literal, pass through.
+        if literal_rest:
+            buf.append(ch)
+            i += 1
+            continue
+
+        # Opening quote.
+        if ch == '"':
+            in_string = True
+            buf.append(ch)
+            i += 1
+            continue
+
+        # Detect REM or DATA keywords which mark the rest of the line as literal.
+        triggered = False
+        for kw in ('REM', 'DATA'):
+            kl = len(kw)
+            if code[i:i + kl] == kw:
+                # Confirm not part of a longer identifier.
+                after = i + kl
+                if after >= n or not code[after].isalpha():
+                    buf.append(kw)
+                    i += kl
+                    literal_rest = True
+                    triggered = True
+                    break
+        if triggered:
+            continue
+
+        # Two-character comparison operators - must be checked before single-char.
+        two = code[i:i + 2]
+        if two in ('<>', '<=', '>='):
+            _ensureSpace(buf)
+            buf.append(two)
+            buf.append(' ')
+            i += 2
+            while i < n and code[i] == ' ':
+                i += 1
+            continue
+
+        # Single-character comparison and assignment operators.
+        if ch in ('=', '<', '>'):
+            _ensureSpace(buf)
+            buf.append(ch)
+            buf.append(' ')
+            i += 1
+            while i < n and code[i] == ' ':
+                i += 1
+            continue
+
+        # Star command - * at the start of a statement passes the rest of
+        # the line to the MOS command interpreter verbatim.  Do not add
+        # spaces; mark remainder as literal.
+        if ch == '*':
+            prev = ''.join(buf).rstrip()
+            if not prev or prev[-1] == ':':
+                buf.append('*')
+                i += 1
+                literal_rest = True
+                continue
+
+        # Arithmetic operators - treat +/- as unary when following ( , : or operator.
+        if ch in ('+', '-', '*', '/'):
+            prev = ''.join(buf).rstrip()
+            is_unary = ch in ('+', '-') and (not prev or prev[-1] in '(,:+-*/=')
+            if is_unary:
+                buf.append(ch)
+            else:
+                _ensureSpace(buf)
+                buf.append(ch)
+                buf.append(' ')
+                while i + 1 < n and code[i + 1] == ' ':
+                    i += 1
+            i += 1
+            continue
+
+        # Colon statement separator - pad to ` : ` on both sides.
+        if ch == ':':
+            while buf and buf[-1] == ' ':
+                buf.pop()
+            buf.append(' : ')
+            i += 1
+            while i < n and code[i] == ' ':
+                i += 1
+            continue
+
+        # Comma - normalise to exactly one following space, no leading space.
+        if ch == ',':
+            while buf and buf[-1] == ' ':
+                buf.pop()
+            buf.append(', ')
+            i += 1
+            while i < n and code[i] == ' ':
+                i += 1
+            continue
+
+        buf.append(ch)
+        i += 1
+
+    # Collapse any double spaces introduced by adjacent padding operations,
+    # but only outside strings and literal tails (which are already done).
+    return re.sub(r'  +', ' ', ''.join(buf))
+
+
+def _ensureSpace(buf):
+    """Trim trailing spaces from buf then append exactly one space."""
+    while buf and buf[-1] == ' ':
+        buf.pop()
+    buf.append(' ')
 
 # ---------------------------------------------------------------------------
 # DFS disc image handling
@@ -497,12 +684,86 @@ def cmdCat(args):
         print()
 
 
-def cmdExtract(args):
-    """Extract and detokenize a file from the disc image.
+def _extractAll(args):
+    """Extract every file from a disc image into a directory.
+
+    BASIC programs are saved as .bas plain text.
+    Binary files are saved as .bin raw bytes.
+    Load/exec addresses for binary files are printed to stdout.
 
     Args:
         args: Parsed command-line arguments for the extract subcommand.
     """
+    sides = openDiscImage(args.image)
+
+    # Default output directory is the image filename stem (e.g. disc39 for disc39.dsd).
+    if args.dir:
+        out_dir = args.dir
+    else:
+        out_dir = os.path.splitext(os.path.basename(args.image))[0]
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    # When the image has two sides we prefix each filename with the side number
+    # to avoid collisions between identically-named files on different sides.
+    multi_side = len(sides) > 1
+
+    for disc in sides:
+        _title, entries = disc.readCatalogue()
+
+        for entry in entries:
+            # Build a safe output filename from the DFS dir.name pair.
+            base = f"{entry['dir']}.{entry['name']}"
+            if multi_side:
+                base = f"side{disc.side}_{base}"
+
+            data = disc.readFile(entry)
+
+            if isBasic(entry) and looksLikeText(data):
+                # Detokenize BASIC and write as plain text.
+                out_path = os.path.join(out_dir, base + ".bas")
+                text_lines = detokenize(data)
+                if args.pretty:
+                    text_lines = prettyPrint(text_lines)
+                with open(out_path, "w", encoding="ascii", errors="replace") as f:
+                    f.write("\n".join(text_lines) + "\n")
+                print(f"  BASIC   {out_path}")
+
+            else:
+                # Write binary file and report addressing metadata.
+                out_path = os.path.join(out_dir, base + ".bin")
+                with open(out_path, "wb") as f:
+                    f.write(data)
+                print(
+                    f"  binary  {out_path}  "
+                    f"load=0x{entry['load']:06X}  "
+                    f"exec=0x{entry['exec']:06X}  "
+                    f"length={entry['length']} bytes"
+                )
+
+
+def cmdExtract(args):
+    """Extract a file (or all files) from the disc image.
+
+    Use -a/--all to extract everything into a directory.
+    BASIC programs are detokenized to LIST-style plain text.
+    Binary files are written as raw bytes, with load/exec addresses reported.
+
+    Args:
+        args: Parsed command-line arguments for the extract subcommand.
+    """
+    # --all: route to the bulk extractor.
+    if args.all:
+        if args.output:
+            print("Error: -o/--output cannot be used with -a/--all. Use -d/--dir instead.",
+                  file=sys.stderr)
+            sys.exit(1)
+        _extractAll(args)
+        return
+
+    if not args.filename:
+        print("Error: filename required unless -a/--all is specified.", file=sys.stderr)
+        sys.exit(1)
     sides = openDiscImage(args.image)
 
     # Parse requested filename. Accept either D.NAME or bare NAME.
@@ -559,26 +820,41 @@ def cmdExtract(args):
 
     disc, entry = found
     data = disc.readFile(entry)
+    full_name = f"{entry['dir']}.{entry['name']}"
 
-    if not isBasic(entry) or not looksLikeText(data):
-        print(
-            f"Warning: {entry['dir']}.{entry['name']} does not appear to be a "
-            f"BBC BASIC program (load={entry['load']:06X} "
-            f"exec={entry['exec']:06X}).  Skipping extraction.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    if isBasic(entry) and looksLikeText(data):
+        # Detokenize the BASIC program and emit as LIST-style text.
+        text_lines = detokenize(data)
+        if args.pretty:
+            text_lines = prettyPrint(text_lines)
+        output = "\n".join(text_lines) + "\n"
 
-    text_lines = detokenize(data)
-    output = "\n".join(text_lines) + "\n"
+        if args.output:
+            with open(args.output, "w", encoding="ascii", errors="replace") as f:
+                f.write(output)
+            print(f"Extracted to {args.output}", file=sys.stderr)
+        else:
+            sys.stdout.write(output)
 
-    # Write either to a file or to standard output.
-    if args.output:
-        with open(args.output, "w", encoding="ascii", errors="replace") as f:
-            f.write(output)
-        print(f"Extracted to {args.output}", file=sys.stderr)
     else:
-        sys.stdout.write(output)
+        # Binary file - write raw bytes.
+        if args.output:
+            with open(args.output, "wb") as f:
+                f.write(data)
+
+            # Report addressing metadata to stdout alongside the confirmation so
+            # the caller has what they need to set the base address in a disassembler.
+            print(f"Extracted to {args.output}")
+            print(
+                f"{full_name}  "
+                f"load=0x{entry['load']:06X}  "
+                f"exec=0x{entry['exec']:06X}  "
+                f"length={entry['length']} bytes"
+            )
+        else:
+            # Raw bytes go directly to stdout - useful for piping to a disassembler.
+            # Metadata is omitted here because it would corrupt the binary stream.
+            sys.stdout.buffer.write(data)
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -605,10 +881,14 @@ def main():
         help="Sort order: name (default), catalog, or size",
     )
 
-    p_extract = sub.add_parser("extract", help="Extract and detokenize a file")
+    p_extract = sub.add_parser("extract", help="Extract a file, or all files with -a")
     p_extract.add_argument("image", help="Path to .ssd or .dsd disc image")
-    p_extract.add_argument("filename", help="DFS filename, e.g. T.MYPROG or MYPROG")
-    p_extract.add_argument("-o", "--output", help="Write to file instead of stdout")
+    p_extract.add_argument("filename", nargs="?", help="DFS filename, e.g. T.MYPROG or MYPROG")
+    p_extract.add_argument("-a", "--all", action="store_true", help="Extract all files")
+    p_extract.add_argument("-o", "--output", help="Write single file to this path instead of stdout")
+    p_extract.add_argument("-d", "--dir", help="Output directory for -a/--all (default: image name)")
+    p_extract.add_argument("--pretty", action="store_true",
+                           help="Add spaces around operators for readability (BASIC only)")
 
     args = parser.parse_args()
 
