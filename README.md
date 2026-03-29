@@ -1,8 +1,12 @@
 # Golden Brown - BBC BASIC Music Player
 
-*Golden Brown* by The Stranglers (1981) is one of the stranger pop songs ever to chart: a waltz in an irregular compound time signature, built on a harpsichord. Capturing it on a BBC Micro - in under 90 lines of BBC BASIC - is a remarkable piece of programming craft.
+*Golden Brown* by The Stranglers (1981) is one of the stranger pop songs ever to chart: a waltz in an irregular compound time signature, built on a harpsichord.
 
-They built a three-voice sequencer with self-compensating timing. They designed a note encoding scheme where each score character is a physical keyboard key. They wrote a real-time animated note visualiser in five lines by reaching directly into screen memory.
+Capturing it on a BBC Micro in BBC BASIC is an impressive piece of programming craft, especially considering it has:
+
+- a three-voice sequencer with self-correcting timing
+- a very smart note encoding scheme
+- a very efficient visualisation of notes being played
 
 All of it in under 60 lines of BASIC.
 
@@ -31,9 +35,9 @@ So it remained for many years, the memory occasionally resurfacing as I thought 
 
 It was during one of these recollections that I went searching and happened across [this YouTube video](https://www.youtube.com/watch?v=oVD85-IGBDA) posted by [envanligfjant](https://www.youtube.com/@envanligfjant). It was Golden Brown on the BBC Micro!
 
-With some excitement I saw it had a reference to [8-Bit Software - Issue 27 (1992, Richardson, C.J.)](https://8bs.nerdoftheherd.com/8BS27/).
+With some excitement I saw it had a reference to [8-Bit Software - Issue 27 (1992, Richardson, C.J.)](https://8bs.nerdoftheherd.com/8BS27/). So I followed the links and it fired up in [jsbeeb](https://bbc.xania.org/).
 
-So I followed the links and it fired up in [jsbeeb](https://bbc.xania.org/). There I was again, listening to Golden Brown playing out of a BBC (_emulated_) Micro and just like I did so many years ago at that adult education class I hit Escape and typed `LIST`.
+There I was again, listening to Golden Brown playing out of a BBC (_emulated_) Micro and just like I did so many years ago at that adult education class I hit Escape and typed `LIST`.
 
 I had the source code. Even better I have a disc image with it on. I extracted the BBC BASIC program and here it is as `goldenbrown.bas`.
 
